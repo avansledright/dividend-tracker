@@ -1,6 +1,6 @@
 services:
   web:
-    image: dividend-tracker-web:latest
+    image: ${DOCKER_REGISTRY}/dividend-tracker-web:latest
     ports:
       - "5050:5000"
     environment:
