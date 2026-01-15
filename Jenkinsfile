@@ -42,7 +42,7 @@ pipeline {
                         sed 's|\\\${DOCKER_REGISTRY}|${DOCKER_REGISTRY}:5000|g' docker-compose.yml > /tmp/${STACK_NAME}-compose.yml
                         scp -o StrictHostKeyChecking=no /tmp/${STACK_NAME}-compose.yml jenkins@${SWARM_MANAGER}:/tmp/${STACK_NAME}-compose.yml
                         ssh -o StrictHostKeyChecking=no jenkins@${SWARM_MANAGER} '
-                            docker stack deploy -c /tmp/${STACK_NAME}-compose.yml ${STACK_NAME}
+                            docker stack deploy --with-registry-auth -c /tmp/${STACK_NAME}-compose.yml ${STACK_NAME}
                             rm /tmp/${STACK_NAME}-compose.yml
                         '
                         rm /tmp/${STACK_NAME}-compose.yml
