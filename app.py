@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session
 from pymongo import MongoClient
 import requests
 import csv
@@ -6,12 +6,38 @@ import io
 import os
 import time
 import logging
+import re
+import secrets
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['APPLICATION_ROOT'] = '/finance'
+app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1MB max file size
+app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+
+# Symbol validation regex - only alphanumeric, 1-10 chars
+SYMBOL_PATTERN = re.compile(r'^[A-Z0-9]{1,10}$')
+
+def validate_symbol(symbol):
+    """Validate stock symbol format"""
+    if not symbol or not SYMBOL_PATTERN.match(symbol):
+        return None
+    return symbol
+
+def generate_csrf_token():
+    """Generate or retrieve CSRF token"""
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(32)
+    return session['csrf_token']
+
+def verify_csrf_token():
+    """Verify CSRF token from request header"""
+    token = request.headers.get('X-CSRF-Token')
+    if not token or token != session.get('csrf_token'):
+        return False
+    return True
 
 mongo_uri = os.environ.get('MONGO_URI', 'mongodb://mongo:27017/')
 client = MongoClient(mongo_uri)
@@ -74,7 +100,7 @@ def get_live_data(symbols):
 
 @app.route('/finance/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', csrf_token=generate_csrf_token())
 
 @app.route('/finance/api/assets', methods=['GET'])
 def get_assets():
@@ -93,9 +119,20 @@ def get_assets():
 
 @app.route('/finance/api/assets', methods=['POST'])
 def add_asset():
+    if not verify_csrf_token():
+        return jsonify({'status': 'error', 'message': 'Invalid CSRF token'}), 403
+
     data = request.json
-    symbol = data.get('symbol', '').upper()
-    quantity = float(data.get('quantity', 0))
+    symbol = validate_symbol(data.get('symbol', '').upper())
+    if not symbol:
+        return jsonify({'status': 'error', 'message': 'Invalid symbol'}), 400
+
+    try:
+        quantity = float(data.get('quantity', 0))
+        if quantity <= 0:
+            return jsonify({'status': 'error', 'message': 'Invalid quantity'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'status': 'error', 'message': 'Invalid quantity'}), 400
 
     existing = assets.find_one({'symbol': symbol})
     if existing:
@@ -106,18 +143,41 @@ def add_asset():
 
 @app.route('/finance/api/assets/<symbol>', methods=['PUT'])
 def update_asset(symbol):
+    if not verify_csrf_token():
+        return jsonify({'status': 'error', 'message': 'Invalid CSRF token'}), 403
+
+    symbol = validate_symbol(symbol.upper())
+    if not symbol:
+        return jsonify({'status': 'error', 'message': 'Invalid symbol'}), 400
+
     data = request.json
-    quantity = float(data.get('quantity', 0))
-    assets.update_one({'symbol': symbol.upper()}, {'$set': {'quantity': quantity}})
+    try:
+        quantity = float(data.get('quantity', 0))
+        if quantity <= 0:
+            return jsonify({'status': 'error', 'message': 'Invalid quantity'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'status': 'error', 'message': 'Invalid quantity'}), 400
+
+    assets.update_one({'symbol': symbol}, {'$set': {'quantity': quantity}})
     return jsonify({'status': 'ok'})
 
 @app.route('/finance/api/assets/<symbol>', methods=['DELETE'])
 def delete_asset(symbol):
-    assets.delete_one({'symbol': symbol.upper()})
+    if not verify_csrf_token():
+        return jsonify({'status': 'error', 'message': 'Invalid CSRF token'}), 403
+
+    symbol = validate_symbol(symbol.upper())
+    if not symbol:
+        return jsonify({'status': 'error', 'message': 'Invalid symbol'}), 400
+
+    assets.delete_one({'symbol': symbol})
     return jsonify({'status': 'ok'})
 
 @app.route('/finance/api/import', methods=['POST'])
 def import_csv():
+    if not verify_csrf_token():
+        return jsonify({'status': 'error', 'message': 'Invalid CSRF token'}), 403
+
     if 'file' not in request.files:
         return jsonify({'status': 'error', 'message': 'No file provided'}), 400
 
@@ -137,10 +197,12 @@ def import_csv():
             for key in row:
                 key_lower = key.lower().strip()
                 if key_lower in ['symbol', 'ticker', 'stock']:
-                    symbol = row[key].strip().upper()
+                    symbol = validate_symbol(row[key].strip().upper())
                 elif key_lower in ['quantity', 'qty', 'shares', 'amount']:
                     try:
                         quantity = float(row[key].strip())
+                        if quantity <= 0:
+                            quantity = None
                     except ValueError:
                         continue
 
@@ -156,7 +218,7 @@ def import_csv():
         return jsonify({'status': 'ok', 'imported': imported})
     except Exception as e:
         logger.error(f'Import error: {e}')
-        return jsonify({'status': 'error', 'message': str(e)}), 400
+        return jsonify({'status': 'error', 'message': 'Failed to process CSV file'}), 400
 
 @app.route('/finance/api/summary', methods=['GET'])
 def get_summary():
@@ -211,4 +273,4 @@ def get_monthly():
     return jsonify(result)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Dividend Tracker</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -195,6 +196,18 @@
         let sortField = 'symbol';
         let sortAsc = true;
 
+        // XSS protection - escape HTML entities
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // CSRF token helper
+        function getCsrfToken() {
+            return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        }
+
         async function loadAssets() {
             const res = await fetch(`${API}/assets`);
             assetsData = await res.json();
@@ -217,18 +230,20 @@
             });
 
             const list = document.getElementById('assetList');
-            list.innerHTML = sorted.map(a => `
-                <li class="asset-item" data-symbol="${a.symbol}">
+            list.innerHTML = sorted.map(a => {
+                const sym = escapeHtml(a.symbol);
+                return `
+                <li class="asset-item" data-symbol="${sym}">
                     <div class="asset-info">
-                        <h3>${a.symbol}</h3>
-                        <p>${a.quantity} shares @ $${a.price.toFixed(2)}</p>
+                        <h3>${sym}</h3>
+                        <p>${escapeHtml(String(a.quantity))} shares @ $${a.price.toFixed(2)}</p>
                         <div class="asset-actions">
-                            <button onclick="showEdit('${a.symbol}', ${a.quantity})">Edit</button>
-                            <button class="danger" onclick="deleteAsset('${a.symbol}')">Remove</button>
+                            <button onclick="showEdit('${sym}', ${a.quantity})">Edit</button>
+                            <button class="danger" onclick="deleteAsset('${sym}')">Remove</button>
                         </div>
-                        <div class="edit-form hidden" id="edit-${a.symbol}">
-                            <input type="number" id="qty-${a.symbol}" value="${a.quantity}" step="0.01">
-                            <button onclick="updateAsset('${a.symbol}')">Save</button>
+                        <div class="edit-form hidden" id="edit-${sym}">
+                            <input type="number" id="qty-${sym}" value="${a.quantity}" step="0.01">
+                            <button onclick="updateAsset('${sym}')">Save</button>
                         </div>
                     </div>
                     <div class="asset-div">
@@ -237,7 +252,7 @@
                         <div class="monthly">$${a.monthly_dividend.toFixed(2)}/mo</div>
                     </div>
                 </li>
-            `).join('');
+            `}).join('');
         }
 
         function sortAssets(field) {
@@ -276,13 +291,13 @@
             container.innerHTML = months.map(m => `
                 <div class="month-item">
                     <div class="month-header" onclick="toggleMonth(${m.month})">
-                        <span class="month-name">${m.name}</span>
+                        <span class="month-name">${escapeHtml(m.name)}</span>
                         <span class="month-total ${m.total === 0 ? 'zero' : ''}">$${m.total.toFixed(2)}</span>
                     </div>
                     <div class="month-details hidden" id="month-${m.month}">
                         ${m.assets.length ? m.assets.map(a => `
                             <div class="month-asset">
-                                <span class="month-asset-symbol">${a.symbol}</span>
+                                <span class="month-asset-symbol">${escapeHtml(a.symbol)}</span>
                                 <span class="month-asset-amount">$${a.amount.toFixed(2)}</span>
                             </div>
                         `).join('') : '<div class="month-asset"><span style="opacity:0.5">No dividends</span></div>'}
@@ -299,11 +314,19 @@
             const symbol = document.getElementById('symbol').value;
             const quantity = document.getElementById('quantity').value;
             if (!symbol || !quantity) return;
-            await fetch(`${API}/assets`, {
+            const res = await fetch(`${API}/assets`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCsrfToken()
+                },
                 body: JSON.stringify({symbol, quantity})
             });
+            const data = await res.json();
+            if (data.status === 'error') {
+                alert(data.message);
+                return;
+            }
             document.getElementById('symbol').value = '';
             document.getElementById('quantity').value = '';
             loadAssets();
@@ -315,17 +338,33 @@
 
         async function updateAsset(symbol) {
             const quantity = document.getElementById(`qty-${symbol}`).value;
-            await fetch(`${API}/assets/${symbol}`, {
+            const res = await fetch(`${API}/assets/${symbol}`, {
                 method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCsrfToken()
+                },
                 body: JSON.stringify({quantity})
             });
+            const data = await res.json();
+            if (data.status === 'error') {
+                alert(data.message);
+                return;
+            }
             loadAssets();
         }
 
         async function deleteAsset(symbol) {
             if (!confirm(`Remove ${symbol}?`)) return;
-            await fetch(`${API}/assets/${symbol}`, {method: 'DELETE'});
+            const res = await fetch(`${API}/assets/${symbol}`, {
+                method: 'DELETE',
+                headers: {'X-CSRF-Token': getCsrfToken()}
+            });
+            const data = await res.json();
+            if (data.status === 'error') {
+                alert(data.message);
+                return;
+            }
             loadAssets();
         }
 
@@ -342,6 +381,7 @@
             try {
                 const res = await fetch(`${API}/import`, {
                     method: 'POST',
+                    headers: {'X-CSRF-Token': getCsrfToken()},
                     body: formData
                 });
                 const data = await res.json();
