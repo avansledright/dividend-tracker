@@ -15,8 +15,8 @@ pipeline {
             steps {
                 sh """
                     docker build \
-                        --tag ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
-                        --tag ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest \
+                        --tag ${DOCKER_REGISTRY}:5000/${IMAGE_NAME}:${IMAGE_TAG} \
+                        --tag ${DOCKER_REGISTRY}:5000/${IMAGE_NAME}:latest \
                         .
                 """
             }
@@ -25,10 +25,10 @@ pipeline {
         stage('Push') {
             steps {
                 script {
-                    docker.withRegistry("http://${DOCKER_REGISTRY}") {
+                    docker.withRegistry("http://${DOCKER_REGISTRY}:5000") {
                         sh """
-                            docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-                            docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
+                            docker push ${DOCKER_REGISTRY}:5000/${IMAGE_NAME}:${IMAGE_TAG}
+                            docker push ${DOCKER_REGISTRY}:5000/${IMAGE_NAME}:latest
                         """
                     }
                 }
@@ -39,7 +39,7 @@ pipeline {
             steps {
                 sshagent(credentials: [SWARM_SSH_CREDENTIALS]) {
                     sh """
-                        sed 's|\\\${DOCKER_REGISTRY}|${DOCKER_REGISTRY}|g' docker-compose.yml > /tmp/${STACK_NAME}-compose.yml
+                        sed 's|\\\${DOCKER_REGISTRY}|${DOCKER_REGISTRY}:5000|g' docker-compose.yml > /tmp/${STACK_NAME}-compose.yml
                         scp -o StrictHostKeyChecking=no /tmp/${STACK_NAME}-compose.yml jenkins@${SWARM_MANAGER}:/tmp/${STACK_NAME}-compose.yml
                         ssh -o StrictHostKeyChecking=no jenkins@${SWARM_MANAGER} '
                             docker stack deploy -c /tmp/${STACK_NAME}-compose.yml ${STACK_NAME}
