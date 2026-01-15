@@ -44,6 +44,9 @@ client = MongoClient(mongo_uri)
 db = client.dividend_tracker
 assets = db.assets
 
+# Optional Alpha Vantage API key for fallback (free tier: 25 requests/day)
+ALPHA_VANTAGE_KEY = os.environ.get('ALPHA_VANTAGE_KEY', '')
+
 cache = {'data': {}, 'timestamp': 0}
 CACHE_TTL = 300  # 5 minutes
 
@@ -51,12 +54,17 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 }
 
-def fetch_symbol(symbol):
+def fetch_yahoo(symbol):
+    """Primary source: Yahoo Finance"""
     url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1y&interval=1d&events=div'
     try:
         resp = requests.get(url, headers=HEADERS, timeout=10)
         resp.raise_for_status()
         data = resp.json()
+
+        if data['chart']['result'] is None:
+            return None
+
         result = data['chart']['result'][0]
         price = result['meta']['regularMarketPrice']
 
@@ -72,10 +80,72 @@ def fetch_symbol(symbol):
                 if month not in div_months:
                     div_months.append(month)
 
-        return {'price': price, 'dividend': annual_div, 'div_months': sorted(div_months)}
+        return {'price': price, 'dividend': annual_div, 'div_months': sorted(div_months), 'valid': True, 'source': 'yahoo'}
     except Exception as e:
-        logger.error(f'{symbol} fetch error: {e}')
+        logger.warning(f'{symbol} Yahoo fetch failed: {e}')
         return None
+
+def fetch_alpha_vantage(symbol):
+    """Fallback source: Alpha Vantage (requires API key)"""
+    if not ALPHA_VANTAGE_KEY:
+        return None
+
+    try:
+        # Get quote data
+        quote_url = f'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}'
+        resp = requests.get(quote_url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        if 'Global Quote' not in data or not data['Global Quote']:
+            return None
+
+        price = float(data['Global Quote'].get('05. price', 0))
+
+        # Get dividend data (monthly adjusted includes dividends)
+        div_url = f'https://www.alphavantage.co/query?function=TIME_SERIES_MONTHLY_ADJUSTED&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}'
+        div_resp = requests.get(div_url, timeout=10)
+        div_resp.raise_for_status()
+        div_data = div_resp.json()
+
+        annual_div = 0
+        div_months = []
+
+        if 'Monthly Adjusted Time Series' in div_data:
+            from datetime import datetime
+            now = datetime.now()
+            one_year_ago = now.replace(year=now.year - 1)
+
+            for date_str, values in div_data['Monthly Adjusted Time Series'].items():
+                date = datetime.strptime(date_str, '%Y-%m-%d')
+                if date >= one_year_ago:
+                    div_amount = float(values.get('7. dividend amount', 0))
+                    if div_amount > 0:
+                        annual_div += div_amount
+                        if date.month not in div_months:
+                            div_months.append(date.month)
+
+        return {'price': price, 'dividend': annual_div, 'div_months': sorted(div_months), 'valid': True, 'source': 'alphavantage'}
+    except Exception as e:
+        logger.warning(f'{symbol} Alpha Vantage fetch failed: {e}')
+        return None
+
+def fetch_symbol(symbol):
+    """Fetch symbol data with fallback"""
+    # Try Yahoo Finance first
+    result = fetch_yahoo(symbol)
+    if result:
+        return result
+
+    # Fallback to Alpha Vantage
+    result = fetch_alpha_vantage(symbol)
+    if result:
+        logger.info(f'{symbol} fetched from Alpha Vantage fallback')
+        return result
+
+    # Symbol not found in any source
+    logger.warning(f'{symbol} not found in any data source')
+    return {'price': 0, 'dividend': 0, 'div_months': [], 'valid': False, 'source': None}
 
 def get_live_data(symbols):
     if not symbols:
@@ -88,11 +158,10 @@ def get_live_data(symbols):
     data = {}
     for symbol in symbols:
         result = fetch_symbol(symbol)
-        if result:
-            data[symbol] = result
-            logger.info(f'{symbol}: price={result["price"]}, dividend={result["dividend"]}, months={result["div_months"]}')
-        else:
-            data[symbol] = cache['data'].get(symbol, {'price': 0, 'dividend': 0, 'div_months': []})
+        data[symbol] = result
+        source = result.get('source', 'cache')
+        status = 'valid' if result.get('valid', True) else 'not found'
+        logger.info(f'{symbol}: price={result["price"]}, dividend={result["dividend"]}, source={source}, status={status}')
 
     cache['data'].update(data)
     cache['timestamp'] = now
@@ -110,11 +179,12 @@ def get_assets():
 
     for asset in asset_list:
         symbol = asset['symbol']
-        data = live_data.get(symbol, {'price': 0, 'dividend': 0})
+        data = live_data.get(symbol, {'price': 0, 'dividend': 0, 'valid': False})
         asset['price'] = data['price']
         asset['value'] = data['price'] * asset['quantity']
         asset['annual_dividend'] = data['dividend'] * asset['quantity']
         asset['monthly_dividend'] = asset['annual_dividend'] / 12
+        asset['valid'] = data.get('valid', True)
     return jsonify(asset_list)
 
 @app.route('/finance/api/assets', methods=['POST'])

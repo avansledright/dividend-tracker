@@ -41,6 +41,22 @@ docker compose up -d
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MONGO_URI` | `mongodb://mongo:27017/` | MongoDB connection string |
+| `SECRET_KEY` | (auto-generated) | Flask session secret key |
+| `ALPHA_VANTAGE_KEY` | (none) | Optional API key for fallback data source |
+
+### Data Sources
+
+The application fetches stock data from multiple sources with automatic fallback:
+
+1. **Yahoo Finance** (primary) - No API key required
+2. **Alpha Vantage** (fallback) - Requires free API key from [alphavantage.co](https://www.alphavantage.co/support/#api-key)
+
+If Yahoo Finance fails or rate-limits, the app automatically tries Alpha Vantage. Get a free API key (25 requests/day) and set it via environment variable:
+
+```yaml
+environment:
+  - ALPHA_VANTAGE_KEY=your_api_key_here
+```
 
 ### Port Configuration
 

@@ -88,6 +88,8 @@
         .edit-form { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
         .edit-form input { width: 100px; }
         .hidden { display: none; }
+        .asset-item.invalid { border-left: 3px solid #ef4444; opacity: 0.7; }
+        .invalid-badge { background: #ef4444; color: #fff; font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; margin-left: 0.5rem; }
         .month-item {
             background: rgba(255,255,255,0.05);
             border-radius: 12px;
@@ -232,10 +234,13 @@
             const list = document.getElementById('assetList');
             list.innerHTML = sorted.map(a => {
                 const sym = escapeHtml(a.symbol);
+                const isInvalid = a.valid === false;
+                const invalidClass = isInvalid ? ' invalid' : '';
+                const invalidBadge = isInvalid ? '<span class="invalid-badge">Not Found</span>' : '';
                 return `
-                <li class="asset-item" data-symbol="${sym}">
+                <li class="asset-item${invalidClass}" data-symbol="${sym}">
                     <div class="asset-info">
-                        <h3>${sym}</h3>
+                        <h3>${sym}${invalidBadge}</h3>
                         <p>${escapeHtml(String(a.quantity))} shares @ $${a.price.toFixed(2)}</p>
                         <div class="asset-actions">
                             <button onclick="showEdit('${sym}', ${a.quantity})">Edit</button>

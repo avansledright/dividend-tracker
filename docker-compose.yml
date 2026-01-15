@@ -5,6 +5,7 @@ services:
       - "5051:5000"
     environment:
       - MONGO_URI=mongodb://mongo:27017/
+      - ALPHA_VANTAGE_KEY=${ALPHA_VANTAGE_KEY}
     deploy:
       replicas: 1
       restart_policy:
