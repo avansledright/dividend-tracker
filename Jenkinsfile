@@ -2,47 +2,77 @@ pipeline {
     agent any
 
     environment {
-        SWARM_MANAGER = credentials('docker-swarm-manager')
         DOCKER_REGISTRY = credentials('docker-registry')
-        STACK_NAME = 'dividend-tracker'
+        SWARM_MANAGER = credentials('docker-swarm-manager')
         IMAGE_NAME = 'dividend-tracker-web'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        STACK_NAME = 'dividend-tracker'
+        SWARM_SSH_CREDENTIALS = 'jenkins-ssh'
     }
 
     stages {
         stage('Build') {
             steps {
-                sh 'docker build -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest .'
+                sh """
+                    docker build \
+                        --tag ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
+                        --tag ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest \
+                        .
+                """
             }
         }
 
         stage('Push') {
             steps {
-                sh 'docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest'
+                script {
+                    docker.withRegistry("http://${DOCKER_REGISTRY}") {
+                        sh """
+                            docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                            docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
+                        """
+                    }
+                }
             }
         }
 
         stage('Deploy') {
             steps {
-                sshagent(['jenkins-ssh']) {
-                    sh '''
-                        scp -o StrictHostKeyChecking=no docker-compose.yml jenkins@${SWARM_MANAGER}:/tmp/${STACK_NAME}-compose.yml
-                        ssh -o StrictHostKeyChecking=no jenkins@${SWARM_MANAGER} "
-                            export DOCKER_REGISTRY=${DOCKER_REGISTRY} &&
-                            docker stack deploy -c /tmp/${STACK_NAME}-compose.yml ${STACK_NAME} &&
+                sshagent(credentials: [SWARM_SSH_CREDENTIALS]) {
+                    sh """
+                        sed 's|\\\${DOCKER_REGISTRY}|${DOCKER_REGISTRY}|g' docker-compose.yml > /tmp/${STACK_NAME}-compose.yml
+                        scp -o StrictHostKeyChecking=no /tmp/${STACK_NAME}-compose.yml jenkins@${SWARM_MANAGER}:/tmp/${STACK_NAME}-compose.yml
+                        ssh -o StrictHostKeyChecking=no jenkins@${SWARM_MANAGER} '
+                            docker stack deploy -c /tmp/${STACK_NAME}-compose.yml ${STACK_NAME}
                             rm /tmp/${STACK_NAME}-compose.yml
-                        "
-                    '''
+                        '
+                        rm /tmp/${STACK_NAME}-compose.yml
+                    """
+                }
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                sshagent(credentials: [SWARM_SSH_CREDENTIALS]) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no jenkins@${SWARM_MANAGER} '
+                            docker stack services ${STACK_NAME}
+                        '
+                    """
                 }
             }
         }
     }
 
     post {
+        always {
+            sh 'docker image prune -f || true'
+        }
         failure {
             echo 'Deployment failed'
         }
         success {
-            echo 'Deployment successful'
+            echo "Deployment successful: ${IMAGE_NAME}:${IMAGE_TAG}"
         }
     }
 }
