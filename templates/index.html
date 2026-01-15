@@ -175,7 +175,14 @@
                 </div>
 
                 <div class="card">
-                    <h2 style="margin-bottom: 1rem;">Your Assets</h2>
+                    <div class="asset-header">
+                        <h2>Your Assets</h2>
+                    </div>
+                    <div class="sort-controls">
+                        <button class="sort-btn active" onclick="sortAssets('symbol')" id="sort-symbol">Name <span class="arrow">▲</span></button>
+                        <button class="sort-btn" onclick="sortAssets('value')" id="sort-value">Value <span class="arrow">▲</span></button>
+                        <button class="sort-btn" onclick="sortAssets('quantity')" id="sort-quantity">Shares <span class="arrow">▲</span></button>
+                    </div>
                     <ul class="asset-list" id="assetList"></ul>
                 </div>
             </div>
@@ -184,12 +191,33 @@
 
     <script>
         const API = '/finance/api';
+        let assetsData = [];
+        let sortField = 'symbol';
+        let sortAsc = true;
 
         async function loadAssets() {
             const res = await fetch(`${API}/assets`);
-            const assets = await res.json();
+            assetsData = await res.json();
+            renderAssets();
+            loadSummary();
+            loadMonthly();
+        }
+
+        function renderAssets() {
+            const sorted = [...assetsData].sort((a, b) => {
+                let valA = a[sortField];
+                let valB = b[sortField];
+                if (typeof valA === 'string') {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                }
+                if (valA < valB) return sortAsc ? -1 : 1;
+                if (valA > valB) return sortAsc ? 1 : -1;
+                return 0;
+            });
+
             const list = document.getElementById('assetList');
-            list.innerHTML = assets.map(a => `
+            list.innerHTML = sorted.map(a => `
                 <li class="asset-item" data-symbol="${a.symbol}">
                     <div class="asset-info">
                         <h3>${a.symbol}</h3>
@@ -210,8 +238,26 @@
                     </div>
                 </li>
             `).join('');
-            loadSummary();
-            loadMonthly();
+        }
+
+        function sortAssets(field) {
+            if (sortField === field) {
+                sortAsc = !sortAsc;
+            } else {
+                sortField = field;
+                sortAsc = true;
+            }
+
+            document.querySelectorAll('.sort-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.querySelector('.arrow').textContent = '▲';
+            });
+
+            const btn = document.getElementById(`sort-${field}`);
+            btn.classList.add('active');
+            btn.querySelector('.arrow').textContent = sortAsc ? '▲' : '▼';
+
+            renderAssets();
         }
 
         async function loadSummary() {

@@ -1,19 +1,23 @@
 services:
   web:
-    build: .
+    image: dividend-tracker-web:latest
     ports:
       - "5050:5000"
     environment:
       - MONGO_URI=mongodb://mongo:27017/
-    depends_on:
-      - mongo
-    restart: unless-stopped
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
 
   mongo:
     image: mongo:7
     volumes:
       - mongo_data:/data/db
-    restart: unless-stopped
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
 
 volumes:
   mongo_data:
