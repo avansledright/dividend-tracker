@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dividend Tracker</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 1.5rem; font-size: 1.8rem; }
+        .card {
+            background: rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            backdrop-filter: blur(10px);
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+        }
+        .summary-item { text-align: center; }
+        .summary-item .label { font-size: 0.85rem; opacity: 0.7; }
+        .summary-item .value { font-size: 1.5rem; font-weight: bold; color: #4ade80; }
+        .summary-item .value.blue { color: #60a5fa; }
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        .form-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+        input, button {
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        input {
+            flex: 1;
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+        }
+        input::placeholder { color: rgba(255,255,255,0.5); }
+        button {
+            background: #4ade80;
+            color: #1a1a2e;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:hover { background: #22c55e; }
+        button.danger { background: #ef4444; color: #fff; }
+        button.danger:hover { background: #dc2626; }
+        button.secondary { background: #6366f1; color: #fff; }
+        button.secondary:hover { background: #4f46e5; }
+        .import-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); }
+        .import-section label { font-size: 0.85rem; opacity: 0.7; display: block; margin-bottom: 0.5rem; }
+        .file-input-wrapper { display: flex; gap: 0.5rem; align-items: center; }
+        .file-input-wrapper input[type="file"] { display: none; }
+        .file-label { padding: 0.75rem 1rem; background: rgba(255,255,255,0.15); border-radius: 8px; cursor: pointer; flex: 1; text-align: center; font-size: 0.9rem; }
+        .file-label:hover { background: rgba(255,255,255,0.25); }
+        .asset-list { list-style: none; }
+        .asset-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            margin-bottom: 0.5rem;
+        }
+        .asset-info h3 { font-size: 1.1rem; }
+        .asset-info p { font-size: 0.85rem; opacity: 0.7; }
+        .asset-div { text-align: right; }
+        .asset-div .value { color: #60a5fa; font-weight: bold; }
+        .asset-div .annual { color: #4ade80; }
+        .asset-div .monthly { font-size: 0.85rem; opacity: 0.7; }
+        .asset-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+        .asset-actions button { padding: 0.5rem 0.75rem; font-size: 0.85rem; }
+        .edit-form { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+        .edit-form input { width: 100px; }
+        .hidden { display: none; }
+        .month-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            margin-bottom: 0.5rem;
+            overflow: hidden;
+        }
+        .month-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+        }
+        .month-header:hover { background: rgba(255,255,255,0.05); }
+        .month-name { font-weight: bold; }
+        .month-total { color: #4ade80; font-weight: bold; }
+        .month-total.zero { color: rgba(255,255,255,0.3); }
+        .month-details {
+            padding: 0 1rem 0.75rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        .month-asset {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            font-size: 0.9rem;
+        }
+        .month-asset-symbol { opacity: 0.8; }
+        .month-asset-amount { color: #4ade80; }
+        .sort-controls { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .sort-btn { padding: 0.4rem 0.75rem; font-size: 0.8rem; background: rgba(255,255,255,0.1); color: #fff; border-radius: 6px; }
+        .sort-btn:hover { background: rgba(255,255,255,0.2); }
+        .sort-btn.active { background: #6366f1; }
+        .sort-btn .arrow { margin-left: 0.25rem; font-size: 0.7rem; }
+        .asset-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .asset-header h2 { margin: 0; }
+        @media (max-width: 768px) {
+            .main-grid { grid-template-columns: 1fr; }
+            .summary-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Dividend Tracker</h1>
+
+        <div class="card">
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="label">Portfolio Value</div>
+                    <div class="value blue" id="portfolio">$0.00</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">Avg Monthly</div>
+                    <div class="value" id="monthly">$0.00</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">Yearly Income</div>
+                    <div class="value" id="yearly">$0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <div class="card">
+                <h2 style="margin-bottom: 1rem;">Monthly Breakdown</h2>
+                <div id="monthlyList"></div>
+            </div>
+
+            <div>
+                <div class="card">
+                    <h2 style="margin-bottom: 1rem;">Add Asset</h2>
+                    <div class="form-row">
+                        <input type="text" id="symbol" placeholder="Symbol (e.g., AAPL)">
+                        <input type="number" id="quantity" placeholder="Qty" step="0.01">
+                        <button onclick="addAsset()">Add</button>
+                    </div>
+                    <div class="import-section">
+                        <label>Import from CSV (columns: symbol, quantity)</label>
+                        <div class="file-input-wrapper">
+                            <input type="file" id="csvFile" accept=".csv" onchange="importCSV()">
+                            <label class="file-label" for="csvFile" id="fileLabel">Choose CSV file...</label>
+                            <button class="secondary" onclick="document.getElementById('csvFile').click()">Import</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 style="margin-bottom: 1rem;">Your Assets</h2>
+                    <ul class="asset-list" id="assetList"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = '/finance/api';
+
+        async function loadAssets() {
+            const res = await fetch(`${API}/assets`);
+            const assets = await res.json();
+            const list = document.getElementById('assetList');
+            list.innerHTML = assets.map(a => `
+                <li class="asset-item" data-symbol="${a.symbol}">
+                    <div class="asset-info">
+                        <h3>${a.symbol}</h3>
+                        <p>${a.quantity} shares @ $${a.price.toFixed(2)}</p>
+                        <div class="asset-actions">
+                            <button onclick="showEdit('${a.symbol}', ${a.quantity})">Edit</button>
+                            <button class="danger" onclick="deleteAsset('${a.symbol}')">Remove</button>
+                        </div>
+                        <div class="edit-form hidden" id="edit-${a.symbol}">
+                            <input type="number" id="qty-${a.symbol}" value="${a.quantity}" step="0.01">
+                            <button onclick="updateAsset('${a.symbol}')">Save</button>
+                        </div>
+                    </div>
+                    <div class="asset-div">
+                        <div class="value">$${a.value.toFixed(2)}</div>
+                        <div class="annual">$${a.annual_dividend.toFixed(2)}/yr</div>
+                        <div class="monthly">$${a.monthly_dividend.toFixed(2)}/mo</div>
+                    </div>
+                </li>
+            `).join('');
+            loadSummary();
+            loadMonthly();
+        }
+
+        async function loadSummary() {
+            const res = await fetch(`${API}/summary`);
+            const data = await res.json();
+            document.getElementById('portfolio').textContent = `$${data.portfolio_value.toFixed(2)}`;
+            document.getElementById('monthly').textContent = `$${(data.yearly / 12).toFixed(2)}`;
+            document.getElementById('yearly').textContent = `$${data.yearly.toFixed(2)}`;
+        }
+
+        async function loadMonthly() {
+            const res = await fetch(`${API}/monthly`);
+            const months = await res.json();
+            const container = document.getElementById('monthlyList');
+
+            container.innerHTML = months.map(m => `
+                <div class="month-item">
+                    <div class="month-header" onclick="toggleMonth(${m.month})">
+                        <span class="month-name">${m.name}</span>
+                        <span class="month-total ${m.total === 0 ? 'zero' : ''}">$${m.total.toFixed(2)}</span>
+                    </div>
+                    <div class="month-details hidden" id="month-${m.month}">
+                        ${m.assets.length ? m.assets.map(a => `
+                            <div class="month-asset">
+                                <span class="month-asset-symbol">${a.symbol}</span>
+                                <span class="month-asset-amount">$${a.amount.toFixed(2)}</span>
+                            </div>
+                        `).join('') : '<div class="month-asset"><span style="opacity:0.5">No dividends</span></div>'}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function toggleMonth(month) {
+            document.getElementById(`month-${month}`).classList.toggle('hidden');
+        }
+
+        async function addAsset() {
+            const symbol = document.getElementById('symbol').value;
+            const quantity = document.getElementById('quantity').value;
+            if (!symbol || !quantity) return;
+            await fetch(`${API}/assets`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({symbol, quantity})
+            });
+            document.getElementById('symbol').value = '';
+            document.getElementById('quantity').value = '';
+            loadAssets();
+        }
+
+        function showEdit(symbol, qty) {
+            document.getElementById(`edit-${symbol}`).classList.toggle('hidden');
+        }
+
+        async function updateAsset(symbol) {
+            const quantity = document.getElementById(`qty-${symbol}`).value;
+            await fetch(`${API}/assets/${symbol}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({quantity})
+            });
+            loadAssets();
+        }
+
+        async function deleteAsset(symbol) {
+            if (!confirm(`Remove ${symbol}?`)) return;
+            await fetch(`${API}/assets/${symbol}`, {method: 'DELETE'});
+            loadAssets();
+        }
+
+        async function importCSV() {
+            const fileInput = document.getElementById('csvFile');
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            document.getElementById('fileLabel').textContent = file.name;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch(`${API}/import`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    alert(`Imported ${data.imported} assets`);
+                    loadAssets();
+                } else {
+                    alert(`Error: ${data.message}`);
+                }
+            } catch (e) {
+                alert('Import failed');
+            }
+
+            fileInput.value = '';
+            document.getElementById('fileLabel').textContent = 'Choose CSV file...';
+        }
+
+        loadAssets();
+    </script>
+</body>
+</html>
