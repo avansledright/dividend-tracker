@@ -10,6 +10,9 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+    networks:
+      - default
+      - backend-net
 
   mongo:
     image: mongo:7
@@ -22,3 +25,7 @@ services:
 
 volumes:
   mongo_data:
+
+networks:                                                                                                                                                                                                                                                                                                                                                                  
+  backend-net:                                                                                                                                                                                        
+    external: true
