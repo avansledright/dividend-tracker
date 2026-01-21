@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    triggers {
+        githubPush()
+    }
+
     environment {
         DOCKER_REGISTRY = credentials('docker-registry')
         SWARM_MANAGER = credentials('docker-swarm-manager')
