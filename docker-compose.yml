@@ -7,7 +7,10 @@ services:
       - MONGO_URI=mongodb://mongo:27017/
       - ALPHA_VANTAGE_KEY=${ALPHA_VANTAGE_KEY}
     deploy:
-      replicas: 1
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
       restart_policy:
         condition: on-failure
     networks:
