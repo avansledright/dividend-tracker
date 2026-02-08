@@ -56,4 +56,4 @@ spec:
       volumes:
       - name: mongodb-storage
         persistentVolumeClaim:
-          claimName: mongodb-pvc
+          claimName: dividend-tracker-mongodb-pvc
