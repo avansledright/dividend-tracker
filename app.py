@@ -167,6 +167,24 @@ def get_live_data(symbols):
     cache['timestamp'] = now
     return data
 
+@app.route('/health')
+def health():
+    """Health check endpoint for k8s probes"""
+    try:
+        # Check MongoDB connection
+        client.admin.command('ping')
+        return jsonify({
+            'status': 'healthy',
+            'app': 'dividend-tracker',
+            'database': 'connected'
+        }), 200
+    except Exception as e:
+        logger.error(f'Health check failed: {e}')
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e)
+        }), 503
+
 @app.route('/')
 def index():
     return render_template('index.html', csrf_token=generate_csrf_token())

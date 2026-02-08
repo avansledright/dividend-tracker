@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dividend-tracker
+  namespace: default
+  labels:
+    app: dividend-tracker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dividend-tracker
+  template:
+    metadata:
+      labels:
+        app: dividend-tracker
+    spec:
+      containers:
+      - name: dividend-tracker
+        image: 192.168.1.23:5000/dividend-tracker:${BUILD_NUMBER}
+        ports:
+        - containerPort: 5000
+          name: http
+        env:
+        - name: APPLICATION_ROOT
+          value: "/finance"
+        - name: MONGO_URI
+          value: "mongodb://mongodb:27017/"
+        - name: ALPHA_VANTAGE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: dividend-tracker-secrets
+              key: alpha-vantage-key
+              optional: true
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: dividend-tracker-secrets
+              key: secret-key
+              optional: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /finance/health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /finance/health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3

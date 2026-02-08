@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dividend-tracker
+  namespace: default
+  labels:
+    app: dividend-tracker
+spec:
+  rules:
+  - host: home.home
+    http:
+      paths:
+      - path: /finance
+        pathType: Prefix
+        backend:
+          service:
+            name: dividend-tracker
+            port:
+              number: 5000
