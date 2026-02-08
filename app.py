@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session, redirect
+from flask import Flask, render_template, request, jsonify, session, redirect, Blueprint
 from pymongo import MongoClient
 import requests
 import csv
@@ -16,6 +16,9 @@ app = Flask(__name__)
 app.config['APPLICATION_ROOT'] = '/finance'
 app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1MB max file size
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+
+# Create blueprint with /finance prefix
+bp = Blueprint('main', __name__, url_prefix='/finance')
 
 # Symbol validation regex - only alphanumeric, 1-10 chars
 SYMBOL_PATTERN = re.compile(r'^[A-Z0-9]{1,10}$')
@@ -167,7 +170,7 @@ def get_live_data(symbols):
     cache['timestamp'] = now
     return data
 
-@app.route('/health')
+@bp.route('/health')
 def health():
     """Health check endpoint for k8s probes"""
     try:
@@ -185,11 +188,11 @@ def health():
             'error': str(e)
         }), 503
 
-@app.route('/')
+@bp.route('/')
 def index():
     return render_template('index.html', csrf_token=generate_csrf_token())
 
-@app.route('/api/assets', methods=['GET'])
+@bp.route('/api/assets', methods=['GET'])
 def get_assets():
     asset_list = list(assets.find({}, {'_id': 0}))
     symbols = [a['symbol'] for a in asset_list]
@@ -205,7 +208,7 @@ def get_assets():
         asset['valid'] = data.get('valid', True)
     return jsonify(asset_list)
 
-@app.route('/api/assets', methods=['POST'])
+@bp.route('/api/assets', methods=['POST'])
 def add_asset():
     if not verify_csrf_token():
         return jsonify({'status': 'error', 'message': 'Invalid CSRF token'}), 403
@@ -229,7 +232,7 @@ def add_asset():
         assets.insert_one({'symbol': symbol, 'quantity': quantity})
     return jsonify({'status': 'ok'})
 
-@app.route('/api/assets/<symbol>', methods=['PUT'])
+@bp.route('/api/assets/<symbol>', methods=['PUT'])
 def update_asset(symbol):
     if not verify_csrf_token():
         return jsonify({'status': 'error', 'message': 'Invalid CSRF token'}), 403
@@ -249,7 +252,7 @@ def update_asset(symbol):
     assets.update_one({'symbol': symbol}, {'$set': {'quantity': quantity}})
     return jsonify({'status': 'ok'})
 
-@app.route('/api/assets/<symbol>', methods=['DELETE'])
+@bp.route('/api/assets/<symbol>', methods=['DELETE'])
 def delete_asset(symbol):
     if not verify_csrf_token():
         return jsonify({'status': 'error', 'message': 'Invalid CSRF token'}), 403
@@ -261,7 +264,7 @@ def delete_asset(symbol):
     assets.delete_one({'symbol': symbol})
     return jsonify({'status': 'ok'})
 
-@app.route('/api/import', methods=['POST'])
+@bp.route('/api/import', methods=['POST'])
 def import_csv():
     if not verify_csrf_token():
         return jsonify({'status': 'error', 'message': 'Invalid CSRF token'}), 403
@@ -308,7 +311,7 @@ def import_csv():
         logger.error(f'Import error: {e}')
         return jsonify({'status': 'error', 'message': 'Failed to process CSV file'}), 400
 
-@app.route('/api/summary', methods=['GET'])
+@bp.route('/api/summary', methods=['GET'])
 def get_summary():
     asset_list = list(assets.find({}, {'_id': 0}))
     symbols = [a['symbol'] for a in asset_list]
@@ -327,7 +330,7 @@ def get_summary():
         'portfolio_value': portfolio_value
     })
 
-@app.route('/api/monthly', methods=['GET'])
+@bp.route('/api/monthly', methods=['GET'])
 def get_monthly():
     asset_list = list(assets.find({}, {'_id': 0}))
     symbols = [a['symbol'] for a in asset_list]
@@ -359,6 +362,9 @@ def get_monthly():
         })
 
     return jsonify(result)
+
+# Register blueprint
+app.register_blueprint(bp)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)

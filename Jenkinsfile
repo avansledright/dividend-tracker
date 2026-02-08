@@ -134,7 +134,7 @@ pipeline {
 
                             # Test health endpoint from within cluster
                             echo "Testing health endpoint..."
-                            kubectl exec -n default $POD_NAME -- wget -q -O- http://localhost:5000/health || echo "Health check warning (non-fatal)"
+                            kubectl exec -n default $POD_NAME -- python3 -c "import urllib.request; print(urllib.request.urlopen('http://localhost:5000/finance/health').read().decode())" || echo "Health check warning (non-fatal)"
 
                             echo ""
                             echo "=== Deployment Complete ==="
